@@ -4,9 +4,6 @@ const { connectMongo, mongoose } = require('../../src/config/mongodb')
 
 beforeAll(() => connectMongo())
 afterAll(async () => {
-  await db.destroy()
-  await redis.quit()
-  await mongoose.disconnect()
 })
 
 test('postgres connection', async () => {

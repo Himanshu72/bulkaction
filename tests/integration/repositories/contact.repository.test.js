@@ -16,7 +16,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await db('contacts').where({ account_id: ACCOUNT_ID }).delete()
   await db('accounts').where({ id: ACCOUNT_ID }).delete()
-  await db.destroy()
 })
 
 test('paginatedFetch returns contacts matching filter', async () => {

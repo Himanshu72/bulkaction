@@ -5,7 +5,6 @@ const BulkActionLog = require('../../../src/models/mongodb/bulkActionLog.model')
 beforeAll(() => connectMongo())
 afterAll(async () => {
   await BulkActionLog.deleteMany({ bulkActionId: 'test-model' })
-  await mongoose.disconnect()
 })
 
 test('inserts and retrieves a log entry', async () => {

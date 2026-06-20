@@ -4,7 +4,6 @@ const redis           = require('../config/redis')
 const batchQueue      = require('../queues/batch.queue')
 const { getEntity }   = require('../entities/registry')
 const progressService = require('../services/progress.service')
-const dedupService    = require('../services/dedup.service')
 const bulkActionRepo  = require('../repositories/bulkAction.repository')
 
 const BATCH_SIZE = 500
@@ -12,6 +11,7 @@ const BATCH_SIZE = 500
 async function processCoordinator(job) {
   const { bulkActionId, accountId, entityType, actionType, filters, entityIds, payload } = job.data
 
+  console.log(`[coordinator] Processing job for bulkActionId=${bulkActionId}, filters=${JSON.stringify(filters)}, entityIds=${entityIds ? entityIds.length : null}`)
   await bulkActionRepo.updateStatus(bulkActionId, 'processing', { started_at: new Date() })
 
   const { repository } = getEntity(entityType)
@@ -21,9 +21,10 @@ async function processCoordinator(job) {
   const startedAt = new Date()
 
   if (entityIds && entityIds.length) {
-    // Explicit ID mode — chunk the provided list
-    for (let i = 0; i < entityIds.length; i += BATCH_SIZE) {
-      const chunk = entityIds.slice(i, i + BATCH_SIZE)
+    // Explicit ID mode — deduplicate then chunk
+    const uniqueIds = [...new Set(entityIds)]
+    for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
+      const chunk = uniqueIds.slice(i, i + BATCH_SIZE)
       batchJobs.push({
         name: 'process-batch',
         data: { bulkActionId, accountId, entityType, actionType, payload,
@@ -39,6 +40,7 @@ async function processCoordinator(job) {
     let offset = 0
     while (true) {
       const page = await repository.paginatedFetch(filters || {}, cursor, BATCH_SIZE)
+      console.log(`[coordinator] paginatedFetch returned ${page.length} records (cursor=${cursor}, filters=${JSON.stringify(filters)})`)
       if (!page.length) break
       batchJobs.push({
         name: 'process-batch',
@@ -65,32 +67,11 @@ async function processCoordinator(job) {
     return
   }
 
-  // Seed dedup set with all emails before any batch runs
-  const allEmails = await getAllEmails(repository, filters, entityIds)
-  await dedupService.seed(bulkActionId, allEmails)
-
   await progressService.init(bulkActionId, totalCount)
   await bulkActionRepo.updateStatus(bulkActionId, 'processing', { total_count: totalCount })
 
   // Enqueue all batch jobs
   await batchQueue.addBulk(batchJobs)
-}
-
-async function getAllEmails(repository, filters, entityIds) {
-  if (entityIds && entityIds.length) {
-    const entities = await repository.fetchByIds(entityIds)
-    return entities.map(e => e.email).filter(Boolean)
-  }
-  const emails = []
-  let cursor = null
-  while (true) {
-    const page = await repository.paginatedFetch(filters || {}, cursor, 1000)
-    if (!page.length) break
-    emails.push(...page.map(e => e.email).filter(Boolean))
-    cursor = page[page.length - 1].id
-    if (page.length < 1000) break
-  }
-  return emails
 }
 
 const coordinatorWorker = new Worker('coordinator', processCoordinator, {

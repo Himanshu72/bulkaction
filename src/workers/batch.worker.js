@@ -18,6 +18,7 @@ const dbContext = {
 async function processBatch(job) {
   const { bulkActionId, accountId, entityType, actionType,
           entityIds, payload, bulkActionStartedAt } = job.data
+  console.log(`[batch] Processing batch for bulkActionId=${bulkActionId}, entityIds.length=${entityIds ? entityIds.length : 0}`)
 
   const { repository, validator, uniqueField } = getEntity(entityType)
   const handler = getHandler(actionType)

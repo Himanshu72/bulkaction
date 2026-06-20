@@ -1,0 +1,58 @@
+{
+  "info": { "name": "Bulk Action Platform", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json" },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "account_id", "value": "dddddddd-dddd-dddd-dddd-dddddddddddd" },
+    { "key": "bulk_action_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Create Bulk Update (filter mode)",
+      "request": {
+        "method": "POST", "url": "{{base_url}}/bulk-actions",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"filters\": { \"status\": \"inactive\" },\n  \"payload\": { \"fields\": { \"status\": \"active\" } },\n  \"priority\": 5\n}" }
+      }
+    },
+    {
+      "name": "Create Bulk Update (ID list mode)",
+      "request": {
+        "method": "POST", "url": "{{base_url}}/bulk-actions",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"entityIds\": [\"<uuid1>\", \"<uuid2>\"],\n  \"payload\": { \"fields\": { \"age\": 30 } }\n}" }
+      }
+    },
+    {
+      "name": "Create Scheduled Bulk Update",
+      "request": {
+        "method": "POST", "url": "{{base_url}}/bulk-actions",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"filters\": { \"status\": \"inactive\" },\n  \"payload\": { \"fields\": { \"status\": \"active\" } },\n  \"scheduledAt\": \"2026-12-31T23:00:00Z\"\n}" }
+      }
+    },
+    {
+      "name": "List Bulk Actions",
+      "request": { "method": "GET", "url": "{{base_url}}/bulk-actions?accountId={{account_id}}&page=1&limit=10" }
+    },
+    {
+      "name": "Get Bulk Action Progress",
+      "request": { "method": "GET", "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}" }
+    },
+    {
+      "name": "Get Bulk Action Stats",
+      "request": { "method": "GET", "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/stats" }
+    },
+    {
+      "name": "Get Logs (all)",
+      "request": { "method": "GET", "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?page=1&limit=50" }
+    },
+    {
+      "name": "Get Logs (failures only)",
+      "request": { "method": "GET", "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?status=failure&page=1&limit=50" }
+    },
+    {
+      "name": "Get Logs (skipped only)",
+      "request": { "method": "GET", "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?status=skipped&page=1&limit=50" }
+    }
+  ]
+}

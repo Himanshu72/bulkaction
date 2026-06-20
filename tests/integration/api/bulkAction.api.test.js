@@ -14,8 +14,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await db('bulk_actions').where({ account_id: ACCOUNT_ID }).delete()
   await db('accounts').where({ id: ACCOUNT_ID }).delete()
-  await db.destroy()
-  await mongoose.disconnect()
 })
 
 test('POST /bulk-actions returns 400 for missing required fields', async () => {

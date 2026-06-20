@@ -24,5 +24,4 @@ test('contacts email unique index exists', async () => {
 })
 
 afterAll(async () => {
-  await db.destroy()
 })
