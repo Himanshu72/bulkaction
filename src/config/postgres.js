@@ -3,6 +3,8 @@ const knex = require('knex')
 
 const isTest = process.env.NODE_ENV === 'test'
 
+const ssl = process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false
+
 const db = knex({
   client: 'pg',
   connection: {
@@ -13,8 +15,9 @@ const db = knex({
       : (process.env.POSTGRES_DB     || 'crm_bulk'),
     user:     process.env.POSTGRES_USER     || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'postgres',
+    ssl,
   },
-  pool: { min: 2, max: 10 },
+  pool: { min: 1, max: 5 },
 })
 
 module.exports = db

@@ -1,5 +1,7 @@
 require('dotenv').config()
 
+const ssl = process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false
+
 module.exports = {
   development: {
     client: 'pg',
@@ -9,6 +11,7 @@ module.exports = {
       database: process.env.POSTGRES_DB,
       user:     process.env.POSTGRES_USER,
       password: process.env.POSTGRES_PASSWORD,
+      ssl,
     },
     migrations: { directory: './src/models/postgres/migrations' },
     seeds:      { directory: './seeds' },
@@ -21,6 +24,7 @@ module.exports = {
       database: process.env.POSTGRES_DB_TEST || 'crm_bulk_test',
       user:     process.env.POSTGRES_USER,
       password: process.env.POSTGRES_PASSWORD,
+      ssl,
     },
     migrations: { directory: './src/models/postgres/migrations' },
   },
