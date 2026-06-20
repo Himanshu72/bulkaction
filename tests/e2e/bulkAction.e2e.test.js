@@ -2,24 +2,34 @@
 const request = require('supertest')
 const app     = require('../../src/app')
 const db      = require('../../src/config/postgres')
+const redis   = require('../../src/config/redis')
 const { connectMongo, mongoose } = require('../../src/config/mongodb')
 const BulkActionLog = require('../../src/models/mongodb/bulkActionLog.model')
 
-const coordinatorWorker = require('../../src/workers/coordinator.worker')
-const batchWorker       = require('../../src/workers/batch.worker')
+// Workers are imported inside beforeAll (after Redis flush) to avoid picking
+// up stale BullMQ jobs left in the test Redis DB by earlier test suites.
+let coordinatorWorker, batchWorker
 
 const ACCOUNT_ID = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'
 
 function wait(ms) { return new Promise(r => setTimeout(r, ms)) }
 
 beforeAll(async () => {
+  // Flush Redis test DB to remove stale BullMQ jobs from previous test runs
+  await redis.flushdb()
+
   await connectMongo()
   await db('accounts').insert({ id: ACCOUNT_ID, name: 'E2E Account' }).onConflict('id').ignore()
+  // Use merge() so re-runs reset contacts to known state (status: inactive)
   await db('contacts').insert([
     { account_id: ACCOUNT_ID, email: 'e2e1@test.com', name: 'E2E One', status: 'inactive', age: 20 },
     { account_id: ACCOUNT_ID, email: 'e2e2@test.com', name: 'E2E Two', status: 'inactive', age: 22 },
     { account_id: ACCOUNT_ID, email: 'e2e3@test.com', name: 'E2E Three', status: 'inactive', age: 24 },
-  ]).onConflict('email').ignore()
+  ]).onConflict('email').merge()
+
+  // Import workers after flush so they start with a clean queue
+  coordinatorWorker = require('../../src/workers/coordinator.worker')
+  batchWorker       = require('../../src/workers/batch.worker')
 })
 
 afterAll(async () => {
