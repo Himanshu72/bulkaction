@@ -22,7 +22,7 @@ async function createBulkAction(dto) {
   }, {
     delay,
     priority: dto.priority || 5,
-    jobId:    `coordinator:${row.id}`,
+    jobId:    `coordinator_${row.id}`,
   })
 
   return { id: row.id, status: row.status, scheduledAt: row.scheduled_at, createdAt: row.created_at }

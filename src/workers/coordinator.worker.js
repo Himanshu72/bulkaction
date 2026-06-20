@@ -28,7 +28,7 @@ async function processCoordinator(job) {
         name: 'process-batch',
         data: { bulkActionId, accountId, entityType, actionType, payload,
                 entityIds: chunk, bulkActionStartedAt: startedAt },
-        opts: { jobId: `${bulkActionId}:batch:${i}`, priority: job.opts?.priority || 5 },
+        opts: { jobId: `${bulkActionId}_batch_${i}`, priority: job.opts?.priority || 5 },
       })
       totalCount += chunk.length
       batchesEnqueued++
@@ -44,7 +44,7 @@ async function processCoordinator(job) {
         name: 'process-batch',
         data: { bulkActionId, accountId, entityType, actionType, payload,
                 entityIds: page.map(e => e.id), bulkActionStartedAt: startedAt },
-        opts: { jobId: `${bulkActionId}:batch:${offset}`, priority: job.opts?.priority || 5 },
+        opts: { jobId: `${bulkActionId}_batch_${offset}`, priority: job.opts?.priority || 5 },
       })
       cursor = page[page.length - 1].id
       totalCount += page.length

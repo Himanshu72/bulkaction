@@ -5,7 +5,7 @@ const createSchema = Joi.object({
   accountId:   Joi.string().uuid().required(),
   entityType:  Joi.string().valid('contact').required(),
   actionType:  Joi.string().valid('bulk_update').required(),
-  filters:     Joi.object().default({}),
+  filters:     Joi.object(),
   entityIds:   Joi.array().items(Joi.string().uuid()).min(1),
   payload:     Joi.object({
     fields: Joi.object().min(1).required(),
