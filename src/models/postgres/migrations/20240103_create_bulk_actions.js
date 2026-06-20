@@ -1,0 +1,26 @@
+exports.up = async (knex) => {
+  await knex.schema.createTable('bulk_actions', (t) => {
+    t.uuid('id').primary().defaultTo(knex.raw('gen_random_uuid()'))
+    t.uuid('account_id').notNullable().references('id').inTable('accounts').onDelete('CASCADE')
+    t.string('entity_type', 50).notNullable()
+    t.string('action_type', 50).notNullable()
+    t.string('status', 50).notNullable().defaultTo('queued')
+    t.jsonb('filters').defaultTo('{}')
+    t.jsonb('payload').notNullable()
+    t.integer('priority').notNullable().defaultTo(5)
+    t.integer('total_count').notNullable().defaultTo(0)
+    t.integer('success_count').notNullable().defaultTo(0)
+    t.integer('failure_count').notNullable().defaultTo(0)
+    t.integer('skipped_count').notNullable().defaultTo(0)
+    t.uuid('last_cursor').nullable()
+    t.integer('batches_enqueued').notNullable().defaultTo(0)
+    t.timestamp('scheduled_at').nullable()
+    t.timestamp('started_at').nullable()
+    t.timestamp('completed_at').nullable()
+    t.timestamp('created_at').defaultTo(knex.fn.now())
+  })
+  await knex.raw('CREATE INDEX idx_bulk_actions_account ON bulk_actions(account_id)')
+  await knex.raw('CREATE INDEX idx_bulk_actions_status  ON bulk_actions(status)')
+}
+
+exports.down = (knex) => knex.schema.dropTableIfExists('bulk_actions')
