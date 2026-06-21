@@ -1,12 +1,12 @@
 {
   "info": {
     "name": "Bulk Action Platform",
-    "description": "Full test suite for the Bulk Action Platform API.\n\nBase URL: https://bulkaction.vercel.app\n\nHow to use:\n1. Run requests in order within each folder\n2. 'Create' requests auto-save the new ID into {{bulk_action_id}}\n3. Poll 'Get Progress' until status = completed\n4. Then check Stats and Logs",
+    "description": "Full test suite for the Bulk Action Platform API.\n\nBase URL: http://localhost:3000 (Docker Compose)\n\nPrerequisite: docker compose up -d\n\nHow to use:\n1. Run requests in order within each folder\n2. 'Create' requests auto-save the new ID into {{bulk_action_id}}\n3. Poll 'Get Progress' until status = completed\n4. Then check Stats and Logs",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url",       "value": "https://bulkaction.vercel.app",        "type": "string" },
-    { "key": "account_id",     "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "type": "string" },
+    { "key": "base_url",       "value": "http://localhost:3000",                 "type": "string" },
+    { "key": "account_id",     "value": "cd1ca530-a6b7-4c11-8e06-25e04d81c496", "type": "string" },
     { "key": "bulk_action_id", "value": "",                                      "type": "string" }
   ],
   "item": [
@@ -323,7 +323,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"entityIds\": [\n    \"88552a0a-318c-4bc0-a7eb-6c45254f72f8\",\n    \"949921c8-9064-460d-85fe-d055be874cad\",\n    \"9874d0fe-3e82-42d3-aef9-577699de7c0d\"\n  ],\n  \"payload\": { \"fields\": { \"age\": 30 } }\n}"
+              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"entityIds\": [\n    \"e7b352ae-976c-4781-9e56-5fcbcb6c4b22\",\n    \"1bf93e12-1589-4bd3-8701-ad013362788e\",\n    \"caa323cf-e0e7-4929-9059-508f36e11060\"\n  ],\n  \"payload\": { \"fields\": { \"age\": 30 } }\n}"
             }
           },
           "event": [
@@ -385,7 +385,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"entityIds\": [\n    \"88552a0a-318c-4bc0-a7eb-6c45254f72f8\",\n    \"88552a0a-318c-4bc0-a7eb-6c45254f72f8\"\n  ],\n  \"payload\": { \"fields\": { \"age\": 99 } }\n}"
+              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"entityIds\": [\n    \"e7b352ae-976c-4781-9e56-5fcbcb6c4b22\",\n    \"e7b352ae-976c-4781-9e56-5fcbcb6c4b22\"\n  ],\n  \"payload\": { \"fields\": { \"age\": 99 } }\n}"
             }
           },
           "event": [
