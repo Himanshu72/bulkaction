@@ -16,7 +16,11 @@ async function insert(dto) {
 }
 
 async function findById(id) {
-  return db('bulk_actions').where({ id }).first() || null
+  return db('bulk_actions as ba')
+    .leftJoin('accounts as a', 'a.id', 'ba.account_id')
+    .select('ba.*', 'a.rate_limit')
+    .where('ba.id', id)
+    .first() || null
 }
 
 async function updateStatus(id, status, extra = {}) {
@@ -44,7 +48,7 @@ async function list(accountId, { status } = {}, page = 1, limit = 20) {
 }
 
 async function findStuck() {
-  return db('bulk_actions').where({ status: 'processing' })
+  return db('bulk_actions').where({ status: 'processing' }).limit(500)
 }
 
 module.exports = { insert, findById, updateStatus, updateCursor, updateCounts, list, findStuck }

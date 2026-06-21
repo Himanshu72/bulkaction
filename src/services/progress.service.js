@@ -58,7 +58,7 @@ async function flush(bulkActionId, bulkActionRepo) {
 
 async function cleanup(bulkActionId) {
   const k = keys(bulkActionId)
-  await redis.del(k.total, k.processed, k.success, k.failure, k.skipped, `dedup:${bulkActionId}`)
+  await redis.del(k.total, k.processed, k.success, k.failure, k.skipped)
 }
 
 module.exports = { init, increment, get, flush, cleanup }

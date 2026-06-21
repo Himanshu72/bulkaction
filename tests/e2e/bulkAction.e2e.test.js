@@ -75,7 +75,7 @@ test('end-to-end: create bulk update and wait for completion', async () => {
   expect(updated.length).toBeGreaterThan(0)
 }, 40000)
 
-test('end-to-end: dedup — duplicate entityIds are deduplicated', async () => {
+test('end-to-end: duplicate entityIds are processed as-is (idempotent)', async () => {
   const contacts = await db('contacts').where({ account_id: ACCOUNT_ID }).select('id')
   const ids = [contacts[0].id, contacts[0].id]  // same ID twice
 
@@ -95,8 +95,8 @@ test('end-to-end: dedup — duplicate entityIds are deduplicated', async () => {
   }
   expect(completed).toBe(true)
 
-  // Coordinator deduplicates IDs: only 1 unique entity should be processed
+  // SQL IN deduplicates naturally — totalCount=1 (unique entities), result is idempotent
   const stats = await request(app).get(`/bulk-actions/${id}/stats`)
   expect(stats.body.totalCount).toBe(1)
-  expect(stats.body.successCount).toBeGreaterThanOrEqual(1)
+  expect(stats.body.successCount + stats.body.skippedCount).toBe(1)
 }, 40000)

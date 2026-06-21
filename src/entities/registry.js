@@ -6,8 +6,8 @@ const entityRegistry = {
   contact: {
     repository:       contactRepository,
     validator:        validateContactUpdate,
-    uniqueField:      'email',
     filterableFields: ['status', 'age', 'name', 'email'],
+    logMetadata:      (entity) => ({ email: entity.email }),
   },
 }
 
@@ -17,4 +17,16 @@ function getEntity(entityType) {
   return entityRegistry[entityType]
 }
 
-module.exports = { getEntity }
+function getEntityTypes() {
+  return Object.keys(entityRegistry)
+}
+
+function _test_register(type, entry) {
+  entityRegistry[type] = entry
+}
+
+function _test_unregister(type) {
+  delete entityRegistry[type]
+}
+
+module.exports = { getEntity, getEntityTypes, _test_register, _test_unregister }

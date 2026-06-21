@@ -2,6 +2,8 @@
 const { validateCreatePayload } = require('../../validators/bulkAction.validator')
 const bulkActionService         = require('../../services/bulkAction.service')
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 async function create(req, res, next) {
   try {
     const { error, value } = validateCreatePayload(req.body)
@@ -13,9 +15,14 @@ async function create(req, res, next) {
 
 async function list(req, res, next) {
   try {
-    const { accountId, status, page = 1, limit = 20 } = req.query
-    if (!accountId) return res.status(400).json({ error: 'accountId is required' })
-    const result = await bulkActionService.listBulkActions(accountId, { status }, +page, +limit)
+    const { accountId, status } = req.query
+    if (!accountId || !UUID_RE.test(accountId))
+      return res.status(400).json({ error: 'accountId must be a valid UUID' })
+
+    const page  = Math.max(1, parseInt(req.query.page)  || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20))
+
+    const result = await bulkActionService.listBulkActions(accountId, { status }, page, limit)
     res.json(result)
   } catch (err) { next(err) }
 }
@@ -26,9 +33,7 @@ async function getOne(req, res, next) {
     if (!result) return res.status(404).json({ error: 'Not found' })
     res.json(result)
   } catch (err) {
-    if (err.message && err.message.includes('invalid input syntax for type uuid')) {
-      return res.status(404).json({ error: 'Not found' })
-    }
+    if (err.code === '22P02') return res.status(404).json({ error: 'Not found' })
     next(err)
   }
 }
@@ -43,9 +48,12 @@ async function getStats(req, res, next) {
 
 async function getLogs(req, res, next) {
   try {
-    const { status, page = 1, limit = 50 } = req.query
+    const { status } = req.query
+    const page  = Math.max(1, parseInt(req.query.page)  || 1)
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit) || 50))
+
     const result = await bulkActionService.getBulkActionLogs(
-      req.params.id, status || null, +page, +limit
+      req.params.id, status || null, page, limit
     )
     res.json(result)
   } catch (err) { next(err) }

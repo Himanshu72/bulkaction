@@ -15,6 +15,12 @@ async function fetchByIds(ids) {
   return db('contacts').select('*').whereIn('id', ids)
 }
 
+async function countByIds(ids) {
+  if (!ids.length) return 0
+  const [{ count }] = await db('contacts').whereIn('id', ids).count('id as count')
+  return parseInt(count)
+}
+
 async function updateById(id, fields, updatedAtBefore) {
   const allowed = ['name', 'email', 'age', 'status', 'metadata']
   const safe = {}
@@ -35,4 +41,4 @@ async function updateById(id, fields, updatedAtBefore) {
   return rows.length > 0
 }
 
-module.exports = { paginatedFetch, fetchByIds, updateById }
+module.exports = { paginatedFetch, fetchByIds, countByIds, updateById }

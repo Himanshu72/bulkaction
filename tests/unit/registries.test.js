@@ -6,7 +6,9 @@ test('getEntity returns contact registry entry', () => {
   const entry = getEntity('contact')
   expect(entry).toHaveProperty('repository')
   expect(entry).toHaveProperty('validator')
-  expect(entry.uniqueField).toBe('email')
+  expect(entry).toHaveProperty('logMetadata')
+  expect(typeof entry.logMetadata).toBe('function')
+  expect(entry.logMetadata({ email: 'x@test.com' })).toEqual({ email: 'x@test.com' })
 })
 
 test('getEntity throws for unknown entity type', () => {

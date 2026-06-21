@@ -5,8 +5,7 @@ const { getEntity }      = require('../entities/registry')
 const { getHandler }     = require('../handlers/registry')
 const progressService    = require('../services/progress.service')
 const rateLimitService   = require('../services/rateLimit.service')
-const dedupService       = require('../services/dedup.service')
-const bulkActionLogRepo  = require('../repositories/bulkActionLog.repository')
+const bulkActionLogService = require('../services/bulkActionLog.service')
 const bulkActionRepo     = require('../repositories/bulkAction.repository')
 const db                 = require('../config/postgres')
 
@@ -20,23 +19,19 @@ async function processBatch(job) {
           entityIds, payload, bulkActionStartedAt } = job.data
   console.log(`[batch] Processing batch for bulkActionId=${bulkActionId}, entityIds.length=${entityIds ? entityIds.length : 0}`)
 
-  const { repository, validator, uniqueField } = getEntity(entityType)
+  const { repository, validator } = getEntity(entityType)
   const handler = getHandler(actionType)
 
   // 1. Fetch full entity records
   const entities = await repository.fetchByIds(entityIds)
 
-  // 2. Dedup — split into process vs skip
-  const { toProcess, skipped } = await dedupService.filter(entities, bulkActionId, uniqueField)
-
-  // 3. Rate limit check — block batch if over limit
+  // 2. Rate limit — atomic check+increment via Lua script (no TOCTOU race)
   const bulkAction = await bulkActionRepo.findById(bulkActionId)
-  const limit = bulkAction?.rate_limit || 10000
-  const allowed = await rateLimitService.check(accountId, toProcess.length, limit)
+  const limit      = bulkAction?.rate_limit || 10000
+  const allowed    = await rateLimitService.consume(accountId, entities.length, limit)
   if (!allowed) throw new Error(`Rate limit exceeded for account ${accountId}`)
-  await rateLimitService.consume(accountId, toProcess.length)
 
-  // 4. Process each entity through the handler
+  // 3. Process each entity through the handler
   const ctx = {
     repository,
     validator,
@@ -45,45 +40,27 @@ async function processBatch(job) {
   }
 
   const results = await Promise.all(
-    toProcess.map(entity => handler.execute(entity, payload, ctx).catch(err => ({
+    entities.map(entity => handler.execute(entity, payload, ctx).catch(err => ({
       status: 'failure',
       error: err.message,
       entityId: entity.id,
     })))
   )
 
-  // 5. Build log entries
-  const logs = [
-    ...skipped.map(e => ({
-      bulkActionId, entityId: e.id, entityType,
-      status: 'skipped',
-      errorMessage: `Duplicate ${uniqueField}: ${e[uniqueField]}`,
-      processedAt: new Date(),
-    })),
-    ...results.map((r, i) => ({
-      bulkActionId, entityId: toProcess[i].id, entityType,
-      status: r.status,
-      errorMessage: r.error || null,
-      processedAt: new Date(),
-      metadata: { email: toProcess[i].email },
-    })),
-  ]
+  // 4. Write logs to MongoDB
+  await bulkActionLogService.saveLogs(bulkActionId, entityType, entities, results)
 
-  // 6. Write logs to MongoDB (one call)
-  await bulkActionLogRepo.insertMany(logs)
+  // 5. Increment Redis progress counters
+  await progressService.increment(bulkActionId, results)
 
-  // 7. Increment Redis progress counters
-  const allResults = [
-    ...skipped.map(() => ({ status: 'skipped' })),
-    ...results,
-  ]
-  await progressService.increment(bulkActionId, allResults)
-
-  // 8. Check if this is the last batch — if so, finalize
+  // 6. Check if this is the last batch — if so, finalize
   const progress = await progressService.get(bulkActionId)
   if (progress.processed >= progress.total) {
     await progressService.flush(bulkActionId, bulkActionRepo)
-    await bulkActionRepo.updateStatus(bulkActionId, 'completed', { completed_at: new Date() })
+    await bulkActionRepo.updateStatus(bulkActionId, 'completed', {
+      completed_at: new Date(),
+      total_count:  progress.total,
+    })
     await progressService.cleanup(bulkActionId)
   }
 }
@@ -93,8 +70,27 @@ const batchWorker = new Worker('batch', processBatch, {
   concurrency: 10,
 })
 
-batchWorker.on('failed', (job, err) => {
-  console.error(`Batch job ${job.id} failed:`, err.message)
+batchWorker.on('failed', async (job, err) => {
+  const maxAttempts = job.opts?.attempts ?? 1
+  console.error(`Batch job ${job.id} failed (attempt ${job.attemptsMade}/${maxAttempts}):`, err.message)
+
+  // Only mark the bulk action as failed once all retries are exhausted
+  if (job.attemptsMade >= maxAttempts) {
+    const { bulkActionId } = job?.data || {}
+    if (bulkActionId) {
+      await Promise.all([
+        // Sync whatever progress was made to PostgreSQL before marking failed
+        progressService.flush(bulkActionId, bulkActionRepo),
+        bulkActionRepo.updateStatus(bulkActionId, 'failed', {
+          completed_at:  new Date(),
+          error_message: err.message,
+        }),
+      ]).catch(e => console.error(`Failed to finalize bulk action ${bulkActionId}:`, e.message))
+
+      await progressService.cleanup(bulkActionId)
+        .catch(e => console.error(`Failed to cleanup progress for ${bulkActionId}:`, e.message))
+    }
+  }
 })
 
 module.exports = batchWorker

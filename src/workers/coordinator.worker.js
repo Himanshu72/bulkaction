@@ -21,7 +21,8 @@ async function processCoordinator(job) {
   const startedAt = new Date()
 
   if (entityIds && entityIds.length) {
-    // Explicit ID mode — deduplicate then chunk
+    // Explicit ID mode — SQL COUNT gives exact count of existing rows (handles dupes + missing IDs)
+    totalCount = await repository.countByIds(entityIds)
     const uniqueIds = [...new Set(entityIds)]
     for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
       const chunk = uniqueIds.slice(i, i + BATCH_SIZE)
@@ -29,9 +30,13 @@ async function processCoordinator(job) {
         name: 'process-batch',
         data: { bulkActionId, accountId, entityType, actionType, payload,
                 entityIds: chunk, bulkActionStartedAt: startedAt },
-        opts: { jobId: `${bulkActionId}_batch_${i}`, priority: job.opts?.priority || 5 },
+        opts: {
+          jobId:    `${bulkActionId}_batch_${i}`,
+          priority: job.opts?.priority || 5,
+          attempts: 3,
+          backoff:  { type: 'exponential', delay: 60000 },
+        },
       })
-      totalCount += chunk.length
       batchesEnqueued++
     }
   } else {
@@ -46,7 +51,12 @@ async function processCoordinator(job) {
         name: 'process-batch',
         data: { bulkActionId, accountId, entityType, actionType, payload,
                 entityIds: page.map(e => e.id), bulkActionStartedAt: startedAt },
-        opts: { jobId: `${bulkActionId}_batch_${offset}`, priority: job.opts?.priority || 5 },
+        opts: {
+          jobId:    `${bulkActionId}_batch_${offset}`,
+          priority: job.opts?.priority || 5,
+          attempts: 3,
+          backoff:  { type: 'exponential', delay: 60000 },
+        },
       })
       cursor = page[page.length - 1].id
       totalCount += page.length
@@ -57,13 +67,18 @@ async function processCoordinator(job) {
     }
   }
 
-  // If no entities found, mark as completed immediately
+  // If no entities found, mark as completed immediately — but only if no batches
+  // were previously enqueued (i.e. not a recovery resume that exhausted remaining pages)
   if (totalCount === 0) {
-    await progressService.init(bulkActionId, 0)
-    await bulkActionRepo.updateStatus(bulkActionId, 'completed', {
-      total_count: 0,
-      completed_at: new Date(),
-    })
+    const snapshot = await bulkActionRepo.findById(bulkActionId)
+    if ((snapshot.batches_enqueued || 0) === 0) {
+      await progressService.init(bulkActionId, 0)
+      await bulkActionRepo.updateStatus(bulkActionId, 'completed', {
+        total_count: 0,
+        completed_at: new Date(),
+      })
+    }
+    // else: recovery resume exhausted remaining pages; batch workers own completion
     return
   }
 
