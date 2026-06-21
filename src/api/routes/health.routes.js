@@ -1,10 +1,10 @@
 // src/api/routes/health.routes.js
 const { Router } = require('express')
-const db          = require('../../config/postgres')
-const redis       = require('../../config/redis')
-const { mongoose } = require('../../config/mongodb')
-const coordinatorQueue = require('../../queues/coordinator.queue')
-const batchQueue       = require('../../queues/batch.queue')
+const db                     = require('../../config/postgres')
+const redis                  = require('../../config/redis')
+const { mongoose, connectMongo } = require('../../config/mongodb')
+const coordinatorQueue       = require('../../queues/coordinator.queue')
+const batchQueue             = require('../../queues/batch.queue')
 
 const router = Router()
 
@@ -55,14 +55,13 @@ async function checkRedis() {
 async function checkMongo() {
   const t = Date.now()
   try {
-    const state = mongoose.connection.readyState
-    // 0=disconnected 1=connected 2=connecting 3=disconnecting
-    const labels = ['disconnected', 'connected', 'connecting', 'disconnecting']
-    if (state === 1) {
-      await mongoose.connection.db.admin().ping()
-      return { status: 'ok', latencyMs: Date.now() - t }
+    // On Vercel cold starts connectMongo() in app.js may not have finished yet —
+    // reconnect here if needed so health always reflects the real state
+    if (mongoose.connection.readyState !== 1) {
+      await connectMongo()
     }
-    return { status: 'error', error: `MongoDB state: ${labels[state] || state}` }
+    await mongoose.connection.db.admin().ping()
+    return { status: 'ok', latencyMs: Date.now() - t }
   } catch (err) {
     return { status: 'error', error: err.message }
   }
