@@ -1,33 +1,85 @@
 {
   "info": {
     "name": "Bulk Action Platform",
+    "description": "Full test suite for the Bulk Action Platform API.\n\nBase URL: https://bulkaction.vercel.app\n\nHow to use:\n1. Run requests in order within each folder\n2. 'Create' requests auto-save the new ID into {{bulk_action_id}}\n3. Poll 'Get Progress' until status = completed\n4. Then check Stats and Logs",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url",       "value": "https://bulkaction.vercel.app" },
-    { "key": "account_id",     "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
-    { "key": "bulk_action_id", "value": "" }
+    { "key": "base_url",       "value": "https://bulkaction.vercel.app",        "type": "string" },
+    { "key": "account_id",     "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "type": "string" },
+    { "key": "bulk_action_id", "value": "",                                      "type": "string" }
   ],
   "item": [
     {
-      "name": "── Validation errors ──",
+      "name": "Health",
       "item": [
         {
-          "name": "400 — Missing accountId",
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200))",
+                  "pm.test('All checks ok', () => {",
+                  "  const d = pm.response.json()",
+                  "  pm.expect(d.status).to.eql('ok')",
+                  "  pm.expect(d.checks.postgres.status).to.eql('ok')",
+                  "  pm.expect(d.checks.redis.status).to.eql('ok')",
+                  "  pm.expect(d.checks.mongodb.status).to.eql('ok')",
+                  "})"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Validation Errors",
+      "item": [
+        {
+          "name": "GET /bulk-actions — 400 missing accountId",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/bulk-actions"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400))",
+                  "pm.test('Error message present', () => pm.expect(pm.response.json().error).to.be.a('string'))"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "400 — Invalid (non-UUID) accountId",
+          "name": "GET /bulk-actions — 400 invalid UUID accountId",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/bulk-actions?accountId=not-a-uuid"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400))",
+                  "pm.test('UUID error', () => pm.expect(pm.response.json().error).to.include('UUID'))"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "400 — Missing filters AND entityIds",
+          "name": "POST /bulk-actions — 400 missing filters and entityIds",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/bulk-actions",
@@ -36,91 +88,235 @@
               "mode": "raw",
               "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"payload\": { \"fields\": { \"status\": \"active\" } }\n}"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400', () => pm.response.to.have.status(400))"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "404 — Unknown bulk action ID",
+          "name": "POST /bulk-actions — 400 entityIds over 1000 cap",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/bulk-actions",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"entityIds\": [\"00000000-0000-0000-0000-000000000001\"],\n  \"payload\": { \"fields\": { \"status\": \"active\" } }\n}",
+              "description": "Paste an array of 1001+ UUIDs to trigger the cap validation"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Expect 400 only if you actually send 1001+ IDs",
+                  "// With 1 ID this returns 201 — swap the array for a 1001-item list to test the cap"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /bulk-actions/:id — 404 unknown UUID",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/bulk-actions/00000000-0000-0000-0000-000000000000"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404', () => pm.response.to.have.status(404))"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "404 — Malformed (non-UUID) ID",
+          "name": "GET /bulk-actions/:id — 404 malformed ID",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/bulk-actions/not-a-uuid"
-          }
-        }
-      ]
-    },
-    {
-      "name": "── Mode A — Filter-based ──",
-      "item": [
-        {
-          "name": "Create — filter by status",
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "const id = pm.response.json().id",
-                  "if (id) pm.collectionVariables.set('bulk_action_id', id)"
+                  "pm.test('Status 404', () => pm.response.to.have.status(404))"
                 ]
               }
             }
-          ],
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Mode A — Filter Based",
+      "description": "Targets contacts matching a filter. No upper limit on record count. Coordinator cursor-paginates PostgreSQL.",
+      "item": [
+        {
+          "name": "1. Create — filter by status",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/bulk-actions",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"filters\": { \"status\": \"inactive\" },\n  \"payload\": { \"fields\": { \"status\": \"active\" } },\n  \"priority\": 5\n}"
+              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"filters\": { \"status\": \"active\" },\n  \"payload\": { \"fields\": { \"status\": \"active\" } },\n  \"priority\": 5\n}"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201))",
+                  "const id = pm.response.json().id",
+                  "pm.collectionVariables.set('bulk_action_id', id)",
+                  "pm.test('Has id', () => pm.expect(id).to.be.a('string'))",
+                  "pm.test('Status queued or processing', () => pm.expect(['queued','processing']).to.include(pm.response.json().status))",
+                  "console.log('bulk_action_id set to:', id)"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Create — filter by age",
+          "name": "2. Poll Progress (run until completed)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}"
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "const id = pm.response.json().id",
-                  "if (id) pm.collectionVariables.set('bulk_action_id', id)"
+                  "const d = pm.response.json()",
+                  "pm.test('Has progressPercent', () => pm.expect(d.progressPercent).to.be.a('number'))",
+                  "pm.test('Has totalCount', () => pm.expect(d.totalCount).to.be.a('number'))",
+                  "console.log('Status:', d.status, '| Progress:', d.progressPercent + '%', '| Total:', d.totalCount, '| Success:', d.successCount)"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "3. Get Stats",
           "request": {
-            "method": "POST",
-            "url": "{{base_url}}/bulk-actions",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"filters\": { \"age\": 25 },\n  \"payload\": { \"fields\": { \"status\": \"active\" } }\n}"
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/stats"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200))",
+                  "pm.test('totalCount > 0', () => pm.expect(d.totalCount).to.be.above(0))",
+                  "pm.test('Has durationSeconds', () => pm.expect(d.durationSeconds).to.be.a('number'))",
+                  "console.log('Total:', d.totalCount, '| Success:', d.successCount, '| Failed:', d.failureCount, '| Skipped:', d.skippedCount, '| Duration:', d.durationSeconds + 's')"
+                ]
+              }
             }
-          }
+          ]
+        },
+        {
+          "name": "4. Get Logs — all",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200))",
+                  "pm.test('Has logs array', () => pm.expect(d.logs).to.be.an('array'))",
+                  "pm.test('Has total count', () => pm.expect(d.total).to.be.a('number'))",
+                  "console.log('Total logs:', d.total, '| First log status:', d.logs[0]?.status)"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Get Logs — success only",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?status=success&page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "pm.test('All returned logs are success', () => d.logs.forEach(l => pm.expect(l.status).to.eql('success')))",
+                  "console.log('Success logs:', d.total)"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. Get Logs — failure only",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?status=failure&page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "pm.test('All returned logs are failure', () => d.logs.forEach(l => pm.expect(l.status).to.eql('failure')))",
+                  "console.log('Failure logs:', d.total)"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Get Logs — skipped only",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?status=skipped&page=1&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "console.log('Skipped logs:', d.total)"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "── Mode B — Explicit IDs ──",
+      "name": "Mode B — Explicit IDs",
+      "description": "Pass up to 1000 specific contact UUIDs. Uses SQL COUNT for totalCount (handles dupes + non-existent IDs). Coordinator deduplicates before batching.",
       "item": [
         {
-          "name": "Create — 3 real contact IDs",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "const id = pm.response.json().id",
-                  "if (id) pm.collectionVariables.set('bulk_action_id', id)"
-                ]
-              }
-            }
-          ],
+          "name": "1. Create — 3 real contact IDs",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/bulk-actions",
@@ -129,21 +325,60 @@
               "mode": "raw",
               "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"entityIds\": [\n    \"88552a0a-318c-4bc0-a7eb-6c45254f72f8\",\n    \"949921c8-9064-460d-85fe-d055be874cad\",\n    \"9874d0fe-3e82-42d3-aef9-577699de7c0d\"\n  ],\n  \"payload\": { \"fields\": { \"age\": 30 } }\n}"
             }
-          }
-        },
-        {
-          "name": "Create — duplicate IDs (idempotent, totalCount=1)",
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201))",
                   "const id = pm.response.json().id",
-                  "if (id) pm.collectionVariables.set('bulk_action_id', id)"
+                  "pm.collectionVariables.set('bulk_action_id', id)",
+                  "console.log('bulk_action_id set to:', id)"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "2. Poll Progress",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "console.log('Status:', d.status, '| Total:', d.totalCount, '| Success:', d.successCount, '| Skipped:', d.skippedCount)"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Get Stats",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/stats"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "pm.test('totalCount is 3', () => pm.expect(d.totalCount).to.eql(3))",
+                  "pm.test('successCount + skippedCount = 3', () => pm.expect(d.successCount + d.skippedCount).to.eql(3))"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1b. Create — duplicate IDs (idempotent, totalCount=1)",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/bulk-actions",
@@ -152,96 +387,154 @@
               "mode": "raw",
               "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"entityIds\": [\n    \"88552a0a-318c-4bc0-a7eb-6c45254f72f8\",\n    \"88552a0a-318c-4bc0-a7eb-6c45254f72f8\"\n  ],\n  \"payload\": { \"fields\": { \"age\": 99 } }\n}"
             }
-          }
-        }
-      ]
-    },
-    {
-      "name": "── Scheduled ──",
-      "item": [
-        {
-          "name": "Create — scheduledAt (future)",
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "const id = pm.response.json().id",
-                  "if (id) pm.collectionVariables.set('bulk_action_id', id)"
+                  "pm.test('Status 201', () => pm.response.to.have.status(201))",
+                  "pm.collectionVariables.set('bulk_action_id', pm.response.json().id)",
+                  "console.log('Duplicate IDs test — expect totalCount=1 after completion')"
                 ]
               }
             }
-          ],
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Scheduled",
+      "description": "Create a bulk action with a future scheduledAt. It stays in 'scheduled' status until the delay passes, then the coordinator picks it up automatically.",
+      "item": [
+        {
+          "name": "1. Create — scheduled for future",
           "request": {
             "method": "POST",
             "url": "{{base_url}}/bulk-actions",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"filters\": { \"status\": \"inactive\" },\n  \"payload\": { \"fields\": { \"status\": \"active\" } },\n  \"scheduledAt\": \"2026-12-31T23:00:00Z\"\n}"
+              "raw": "{\n  \"accountId\": \"{{account_id}}\",\n  \"entityType\": \"contact\",\n  \"actionType\": \"bulk_update\",\n  \"filters\": { \"status\": \"active\" },\n  \"payload\": { \"fields\": { \"status\": \"active\" } },\n  \"scheduledAt\": \"2026-12-31T23:00:00Z\"\n}"
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', () => pm.response.to.have.status(201))",
+                  "const d = pm.response.json()",
+                  "pm.test('Status is scheduled', () => pm.expect(d.status).to.eql('scheduled'))",
+                  "pm.test('scheduledAt present', () => pm.expect(d.scheduledAt).to.be.a('string'))",
+                  "pm.collectionVariables.set('bulk_action_id', d.id)",
+                  "console.log('Scheduled for:', d.scheduledAt)"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Get Progress — verify scheduled status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "pm.test('Status is scheduled', () => pm.expect(d.status).to.eql('scheduled'))",
+                  "console.log('Status:', d.status, '| scheduledAt:', d.scheduledAt)"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "── Progress & Results ──",
+      "name": "List & Pagination",
       "item": [
         {
-          "name": "List bulk actions (paginated)",
+          "name": "List — page 1, limit 5",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/bulk-actions?accountId={{account_id}}&page=1&limit=10"
-          }
+            "url": "{{base_url}}/bulk-actions?accountId={{account_id}}&page=1&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200))",
+                  "pm.test('Has rows array', () => pm.expect(d.rows).to.be.an('array'))",
+                  "pm.test('Has total', () => pm.expect(d.total).to.be.a('number'))",
+                  "pm.test('Max 5 rows returned', () => pm.expect(d.rows.length).to.be.at.most(5))",
+                  "console.log('Total actions:', d.total, '| Returned:', d.rows.length)"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List — page 2, limit 5",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/bulk-actions?accountId={{account_id}}&page=2&limit=5"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "pm.test('Status 200', () => pm.response.to.have.status(200))",
+                  "console.log('Page 2 rows:', d.rows.length)"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "List — filter by status=completed",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/bulk-actions?accountId={{account_id}}&status=completed&page=1&limit=10"
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "pm.test('All rows are completed', () => d.rows.forEach(r => pm.expect(r.status).to.eql('completed')))",
+                  "console.log('Completed actions:', d.total)"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "Get progress (live or completed)",
+          "name": "List — filter by status=scheduled",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}"
-          }
-        },
-        {
-          "name": "Get stats (counts + duration)",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/stats"
-          }
-        },
-        {
-          "name": "Get logs — all",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?page=1&limit=50"
-          }
-        },
-        {
-          "name": "Get logs — success only",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?status=success&page=1&limit=50"
-          }
-        },
-        {
-          "name": "Get logs — failure only",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?status=failure&page=1&limit=50"
-          }
-        },
-        {
-          "name": "Get logs — skipped only",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/bulk-actions/{{bulk_action_id}}/logs?status=skipped&page=1&limit=50"
-          }
+            "url": "{{base_url}}/bulk-actions?accountId={{account_id}}&status=scheduled&page=1&limit=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const d = pm.response.json()",
+                  "console.log('Scheduled actions:', d.total)"
+                ]
+              }
+            }
+          ]
         }
       ]
     }
